@@ -1,0 +1,20 @@
+{
+    "name": "thallesaguiar/thaluz",
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Core\\": "core/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Thalles Luz de Aguiar",
+            "email": "thallesaguiar07@gmail.com"
+        }
+    ],
+    "require": {},
+    "scripts": {
+        "start": "php serve.php",
+        "artisan": "php artisan"
+    }
+}

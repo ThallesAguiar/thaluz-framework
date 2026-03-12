@@ -1,0 +1,61 @@
+<?php
+
+if ($argc < 2) {
+    echo "Thaluz Artisan CLI\n";
+    echo "Uso: php artisan [comando] [argumentos]\n";
+    echo "Comandos disponíveis:\n";
+    echo "  make:migration [nome]    - Cria uma nova migration\n";
+    echo "  make:controller [nome]   - Cria um novo Controller\n";
+    echo "  make:model [nome]        - Cria um novo Model\n";
+    echo "  migrate                  - Executa as migrations pendentes\n";
+    exit;
+}
+
+$command = $argv[1];
+
+switch ($command) {
+    case 'make:migration':
+        createMigration($argv[2] ?? null);
+        break;
+    case 'make:controller':
+        createController($argv[2] ?? null);
+        break;
+    case 'make:model':
+        createModel($argv[2] ?? null);
+        break;
+    case 'migrate':
+        require_once 'migrate.php';
+        break;
+    default:
+        echo "Comando '$command' não encontrado.\n";
+        break;
+}
+
+function createMigration($name) {
+    if (!$name) die("Erro: Informe o nome da migration.\n");
+    $dir = __DIR__ . '/database/migrations/';
+    $timestamp = date('Y_m_d_His');
+    $filename = "{$timestamp}_{$name}.php";
+    $table = str_replace(['create_', '_table'], '', $name);
+    $template = "<?php\n\nreturn \"\nCREATE TABLE IF NOT EXISTS $table (\n    id INT AUTO_INCREMENT PRIMARY KEY,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\";\n";
+    file_put_contents($dir . $filename, $template);
+    echo "Migration criada: database/migrations/$filename\n";
+}
+
+function createController($name) {
+    if (!$name) die("Erro: Informe o nome do Controller.\n");
+    if (!str_ends_with($name, 'Controller')) $name .= 'Controller';
+    $path = __DIR__ . "/app/Controllers/$name.php";
+    $template = "<?php\n\nnamespace App\Controllers;\n\nclass $name extends Controller\n{\n    public function index()\n    {\n        return \$this->json(['message' => 'Hello from $name']);\n    }\n}\n";
+    file_put_contents($path, $template);
+    echo "Controller criado: app/Controllers/$name.php\n";
+}
+
+function createModel($name) {
+    if (!$name) die("Erro: Informe o nome do Model.\n");
+    $path = __DIR__ . "/app/Models/$name.php";
+    $table = strtolower($name) . 's';
+    $template = "<?php\n\nnamespace App\Models;\n\nuse Core\Database;\n\nclass $name\n{\n    private static \$table = '$table';\n\n    public static function all()\n    {\n        \$db = Database::getConnection();\n        return \$db->query(\"SELECT * FROM \" . self::\$table)->fetchAll();\n    }\n}\n";
+    file_put_contents($path, $template);
+    echo "Model criado: app/Models/$name.php\n";
+}
