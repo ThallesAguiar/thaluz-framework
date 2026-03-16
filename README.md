@@ -39,7 +39,7 @@ php artisan migrate
 Rollback de migrations (exemplo, 2 passos):
 
 ```bash
-php artisan rollback 2
+php artisan migrate:rollback 2
 ```
 
 4. Inicie o servidor:
