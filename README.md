@@ -1,57 +1,130 @@
-# 🚀 Thaluz - Mini Framework API PHP
+# Thaluz - Mini Framework API PHP
 
-Um mini-framework PHP inspirado no Laravel, focado em APIs leves e rápidas para pequenos projetos, utilizando o padrão MVC.
+Mini framework PHP inspirado no Laravel, focado em APIs.
 
-## 📋 Pré-requisitos
+## Requisitos
 
-- **PHP 8.0+**
-- **Composer**
+- PHP 8.0+
+- Composer
+- MySQL
 
-## 🛠️ Como Iniciar o Projeto
+## Como iniciar
 
-1. **Instalar Dependências e Autoload**:
-   ```bash
-   composer install
-   ```
+1. Instale dependencias:
 
-2. **Configurar Banco de Dados**:
-   - Crie um banco chamado `thaluz` no seu MySQL.
-   - Verifique as credenciais no arquivo `.env`.
-   - Execute as migrations via terminal:
-   ```bash
-   php artisan migrate
-   ```
+```bash
+composer install
+```
 
-3. **Iniciar o Servidor**:
-   ```bash
-   composer start
-   ```
-   *O servidor estará disponível em: **http://localhost:8080***
+2. Configure o `.env` com banco e JWT:
 
----
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_DATABASE=thaluz
+DB_USERNAME=root
+DB_PASSWORD=
+JWT_SECRET=change_me_with_a_long_random_secret
+JWT_ISSUER=Thaluz
+JWT_ACCESS_TTL_MINUTES=15
+JWT_REFRESH_TTL_DAYS=30
+```
 
-## ⌨️ Comandos Artisan (CLI)
+3. Rode migrations:
 
-O Thaluz possui um CLI próprio para agilizar o desenvolvimento:
+```bash
+php artisan migrate
+```
 
-| Comando | Descrição |
+Rollback de migrations (exemplo, 2 passos):
+
+```bash
+php artisan rollback 2
+```
+
+4. Inicie o servidor:
+
+```bash
+composer dev
+```
+
+## Comandos Artisan
+
+| Comando | Descricao |
 | :--- | :--- |
-| `php artisan migrate` | Executa todas as migrations pendentes |
-| `php artisan make:migration {nome}` | Cria um novo arquivo de migration |
-| `php artisan make:controller {nome}` | Cria um novo Controller em `app/Controllers` |
-| `php artisan make:model {nome}` | Cria um novo Model em `app/Models` |
+| `php artisan migrate` | Executa migrations pendentes |
+| `php artisan make:migration {nome}` | Cria migration |
+| `php artisan make:controller {nome}` | Cria controller em `app/Controllers` |
+| `php artisan make:model {nome}` | Cria model em `app/Models` |
+| `php artisan make:middleware {nome}` | Cria middleware em `app/Middleware` |
+| `php artisan rollback [steps]` | Desfaz as ultimas migrations |
 
----
+## Autenticacao JWT 100% stateless
 
-## 🧪 Endpoints da API (CRUD de Usuários)
+Fluxo atual:
 
-| Método | Endpoint | Descrição |
-| :--- | :--- | :--- |
-| `GET` | `/api/users` | Listar todos os usuários |
-| `GET` | `/api/users/{id}` | Buscar um usuário por ID |
-| `POST` | `/api/users` | Criar um novo usuário |
-| `PUT` | `/api/users/{id}` | Atualizar um usuário |
-| `DELETE` | `/api/users/{id}` | Deletar um usuário |
+1. `POST /api/login`
+- valida email/senha
+- retorna `access_token` (JWT curto)
+- retorna `refresh_token` (JWT longo)
 
----
+2. `GET /api/me` (protegida)
+- exige `Authorization: Bearer <access_token>`
+- middleware valida assinatura, `type=access` e expiracao
+
+3. `POST /api/refresh`
+- recebe `refresh_token`
+- valida assinatura, `type=refresh` e expiracao
+- retorna novo par de tokens JWT
+
+4. `POST /api/logout`
+- em modelo stateless, o backend apenas responde sucesso
+- o cliente descarta os tokens localmente
+
+## Aviso importante
+
+Sem estado no servidor, nao existe revogacao imediata de token.
+Um token so deixa de valer quando expira.
+
+## Endpoints
+
+### Publicos
+
+- `GET /api`
+- `GET /api/ping`
+- `POST /api/users`
+- `POST /api/login`
+- `POST /api/refresh`
+
+### Protegidos (middleware `auth`)
+
+- `GET /api/me`
+- `POST /api/logout`
+- `GET /api/users`
+- `GET /api/users/{id}`
+- `PUT /api/users/{id}`
+- `DELETE /api/users/{id}`
+- `GET /api/project`
+
+## Middleware e grupos
+
+- Middleware por rota:
+
+```php
+Router::get('/api/users', 'UserController@index', ['auth']);
+```
+
+- Grupo de middleware:
+
+```php
+Router::group(['middleware' => ['auth']], function () {
+    Router::get('/api/me', 'AuthController@me');
+    Router::post('/api/logout', 'AuthController@logout');
+});
+```
+
+## Closure
+
+Sim, o projeto suporta Closure em handlers e em `Router::group(...)`.
+
 Desenvolvido por Thalles Aguiar.
