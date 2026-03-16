@@ -12,9 +12,13 @@
             "email": "thallesaguiar07@gmail.com"
         }
     ],
-    "require": {},
+    "require": {
+        "firebase/php-jwt": "6.10"
+    },
     "scripts": {
         "start": "php serve.php",
+        "dev": "powershell -ExecutionPolicy Bypass -File watch.ps1",
+        "dev:linux": "which nodemon && nodemon --ext php,env --exec php serve.php || php serve.php",
         "artisan": "php artisan"
     }
 }

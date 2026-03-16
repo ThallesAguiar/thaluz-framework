@@ -8,9 +8,22 @@ use Core\Response;
 
 class UserController extends Controller
 {
+    private function sanitizeUser(array $user): array
+    {
+        unset($user['password']);
+        return $user;
+    }
+
+    private function sanitizeUsers(array $users): array
+    {
+        return array_map(function ($user) {
+            return $this->sanitizeUser($user);
+        }, $users);
+    }
+
     public function index()
     {
-        return $this->json(User::all());
+        return $this->json($this->sanitizeUsers(User::all()));
     }
 
     public function show($id)
@@ -20,44 +33,84 @@ class UserController extends Controller
         if (!$user) {
             return Response::error(
                 'User Not Found',
-                "O usuário com ID $id não foi encontrado.",
+                "O usuario com ID $id nao foi encontrado.",
                 404
             );
         }
 
-        return $this->json($user);
+        return $this->json($this->sanitizeUser($user));
     }
 
     public function store()
     {
         $data = Request::all();
 
-        if (empty($data['name'])) {
+        if (empty($data['name']) || empty($data['email']) || empty($data['password'])) {
             return Response::error(
                 'Validation Error',
-                'O campo "name" é obrigatório.',
+                'Os campos "name", "email" e "password" sao obrigatorios.',
                 422
             );
         }
 
+        if (User::findByEmail($data['email'])) {
+            return Response::error(
+                'Validation Error',
+                'Ja existe usuario com esse email.',
+                422
+            );
+        }
+
+        $data['password'] = password_hash($data['password'], PASSWORD_DEFAULT);
+
         $user = User::create($data);
-        return $this->json($user, 201);
+        return $this->json($this->sanitizeUser($user), 201);
     }
 
     public function update($id)
     {
         $data = Request::all();
+
+        if (empty($data['name'])) {
+            return Response::error(
+                'Validation Error',
+                'O campo "name" e obrigatorio.',
+                422
+            );
+        }
+
+        $existing = User::find($id);
+        if (!$existing) {
+            return Response::error(
+                'User Not Found',
+                "O usuario com ID $id nao foi encontrado para atualizacao.",
+                404
+            );
+        }
+
+        if (!empty($data['email']) && $data['email'] !== ($existing['email'] ?? null)) {
+            $userByEmail = User::findByEmail($data['email']);
+            if ($userByEmail && (int) $userByEmail['id'] !== (int) $id) {
+                return Response::error(
+                    'Validation Error',
+                    'Ja existe usuario com esse email.',
+                    422
+                );
+            }
+        }
+
+        $data['email'] = $data['email'] ?? ($existing['email'] ?? null);
         $user = User::update($id, $data);
 
         if (!$user) {
             return Response::error(
                 'User Not Found',
-                "O usuário com ID $id não foi encontrado para atualização.",
+                "O usuario com ID $id nao foi encontrado para atualizacao.",
                 404
             );
         }
 
-        return $this->json($user);
+        return $this->json($this->sanitizeUser($user));
     }
 
     public function destroy($id)
@@ -67,11 +120,11 @@ class UserController extends Controller
         if (!$deleted) {
             return Response::error(
                 'User Not Found',
-                "O usuário com ID $id não foi encontrado para exclusão.",
+                "O usuario com ID $id nao foi encontrado para exclusao.",
                 404
             );
         }
 
-        return $this->json(['message' => 'Usuário deletado com sucesso']);
+        return $this->json(['message' => 'Usuario deletado com sucesso']);
     }
 }

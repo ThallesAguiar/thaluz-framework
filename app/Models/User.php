@@ -28,9 +28,13 @@ class User
     public static function create($data)
     {
         $db = Database::getConnection();
-        $sql = "INSERT INTO " . self::$table . " (name) VALUES (:name)";
+        $sql = "INSERT INTO " . self::$table . " (name, email, password) VALUES (:name, :email, :password)";
         $stmt = $db->prepare($sql);
-        $stmt->execute(['name' => $data['name']]);
+        $stmt->execute([
+            'name' => $data['name'],
+            'email' => $data['email'] ?? null,
+            'password' => $data['password'] ?? null,
+        ]);
         
         $id = $db->lastInsertId();
         return self::find($id);
@@ -39,14 +43,23 @@ class User
     public static function update($id, $data)
     {
         $db = Database::getConnection();
-        $sql = "UPDATE " . self::$table . " SET name = :name WHERE id = :id";
+        $sql = "UPDATE " . self::$table . " SET name = :name, email = :email WHERE id = :id";
         $stmt = $db->prepare($sql);
         $stmt->execute([
             'name' => $data['name'],
+            'email' => $data['email'] ?? null,
             'id' => $id
         ]);
 
         return self::find($id);
+    }
+
+    public static function findByEmail(string $email)
+    {
+        $db = Database::getConnection();
+        $stmt = $db->prepare("SELECT * FROM " . self::$table . " WHERE email = :email LIMIT 1");
+        $stmt->execute(['email' => $email]);
+        return $stmt->fetch() ?: null;
     }
 
     public static function delete($id)

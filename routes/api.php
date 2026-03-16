@@ -4,20 +4,30 @@ use Core\Response;
 use Core\Router;
 
 Router::get('/api', function () {
-    return Response::json(["message" => "Bem-vindo ao Thaluz API"]);
+    return Response::json(['message' => 'Bem-vindo ao Thaluz API']);
 });
 
-// Listar todos os usuários
-Router::get('/api/users', 'UserController@index');
+Router::get('/api/ping', function () {
+    Response::json([
+        'ok' => true,
+        'message' => 'Thaluz API online',
+    ]);
+});
 
-// Criar um novo usuário
+// Rotas publicas
 Router::post('/api/users', 'UserController@store');
+Router::post('/api/login', 'AuthController@login');
+Router::post('/api/refresh', 'AuthController@refresh');
 
-// Mostrar um usuário específico
-Router::get('/api/users/{id}', 'UserController@show');
+// Rotas protegidas
+Router::group(['middleware' => ['auth']], function () {
+    Router::get('/api/me', 'AuthController@me');
+    Router::post('/api/logout', 'AuthController@logout');
 
-// Atualizar um usuário
-Router::put('/api/users/{id}', 'UserController@update');
+    Router::get('/api/users', 'UserController@index');
+    Router::get('/api/users/{id}', 'UserController@show');
+    Router::put('/api/users/{id}', 'UserController@update');
+    Router::delete('/api/users/{id}', 'UserController@destroy');
 
-// Deletar um usuário
-Router::delete('/api/users/{id}', 'UserController@destroy');
+    Router::get('/api/project', 'ProjectController@index');
+});

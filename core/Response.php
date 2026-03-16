@@ -21,7 +21,7 @@ class Response
     /**
      * Erro seguindo RFC 7808 (Problem Details for HTTP APIs)
      */
-    public static function error($title, $detail, $status = 400, $type = 'about:blank')
+    public static function error($title, $detail, $status = 400, $errors = [], $type = 'about:blank')
     {
         header('Content-Type: application/problem+json');
         http_response_code($status);
@@ -31,7 +31,8 @@ class Response
             'title' => $title,
             'status' => $status,
             'detail' => $detail,
-            'instance' => $_SERVER['REQUEST_URI']
+            'instance' => $_SERVER['REQUEST_URI'],
+            'errors' => $errors
         ]);
         exit;
     }
