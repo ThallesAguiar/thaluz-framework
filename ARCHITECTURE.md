@@ -1,38 +1,53 @@
-# 🏗️ Arquitetura do Thaluz
+# Arquitetura do Thaluz
 
-O Thaluz utiliza o padrão **MVC (Model-View-Controller)** adaptado para APIs modernas.
+O Thaluz usa um MVC enxuto orientado a API.
 
-## 📂 Estrutura de Pastas
+## Estrutura
 
-| Pasta | Descrição |
+| Pasta | Papel |
 | :--- | :--- |
-| **`app/`** | **Camada da Aplicação.** Lógica de negócio (Controllers e Models). |
-| **`core/`** | **O Motor do Framework.** Contém Router, Request, Response e Database. |
-| **`database/`** | **Banco de Dados.** Contém as migrations. |
-| **`public/`** | **Ponto de Entrada.** Única pasta exposta ao servidor (`index.php`). |
-| **`routes/`** | **Definição de Rotas.** Onde os endpoints são registrados. |
-| **`artisan`** | **CLI do Framework.** Ferramenta de linha de comando para automação. |
+| `app/` | Controllers, Models, Middlewares e Services da aplicacao |
+| `core/` | Nucleo do framework (Router, Request, Response, Database) |
+| `database/` | Migrations |
+| `public/` | Entrada HTTP (`index.php`) |
+| `routes/` | Definicao de endpoints |
+| `artisan` | CLI para automacoes |
 
-## 🛠️ Funcionalidades Implementadas
+## Migrations e rollback
 
-### 1. Artisan CLI
-Ferramenta inspirada no Laravel para automação de tarefas:
-- **Geradores**: Criação automática de Controllers, Models e Migrations com templates pré-definidos.
-- **Migrator**: Execução simplificada de scripts de banco de dados.
+- Migrations podem retornar string SQL (compatibilidade) ou array com `up`/`down`.
+- O rollback usa o `down` da migration para desfazer as ultimas execucoes.
 
-### 2. Camada de Dados (PDO)
-- **Segurança**: Uso de *Prepared Statements* para prevenir SQL Injection.
-- **Singleton**: Conexão única por requisição via `Core\Database`.
+## Fluxo da requisicao
 
-### 3. Roteamento e Respostas
-- **Rotas Dinâmicas**: Suporte a parâmetros como `/users/{id}`.
-- **Padronização**: Erros seguem o **RFC 7808** e sucessos retornam um objeto estruturado.
+1. `public/index.php` carrega autoload e env.
+2. Aliases de middleware sao registrados no `Router`.
+3. `routes/api.php` define rotas publicas e protegidas.
+4. `Router::dispatch()` resolve rota e parametros.
+5. Middlewares da rota/grupo executam antes do controller.
+6. Controller usa Models/Services e retorna JSON padronizado.
 
----
+## JWT stateless (auth atual)
 
-## 🔄 Fluxo de uma Requisição
+- `JwtService` cria e valida JWT.
+- `access_token` usa `type=access`, `iss` e TTL curto.
+- `refresh_token` usa `type=refresh`, `iss` e TTL maior.
+- Middleware `auth` valida assinatura, tipo e expiracao do access token.
+- Endpoint `/api/refresh` emite novo par de tokens sem estado no servidor.
 
-1. O **Router** analisa a URI e o método HTTP.
-2. O **Controller** correspondente é instanciado.
-3. O **Model** interage com o banco via **PDO**.
-4. O **Response** envia o JSON formatado de volta ao cliente.
+## Consequencia do modo stateless
+
+- Nao existe revogacao imediata no servidor.
+- Logout depende do cliente descartar os tokens.
+- Seguranca depende de TTL curto no access token e protecao do refresh token no cliente.
+
+## Middleware e grupos
+
+- Middlewares podem ser passados por rota.
+- `Router::group(['middleware' => [...]])` aplica a varias rotas.
+- Middlewares de grupo e de rota sao combinados automaticamente.
+
+## Closures
+
+- Rotas com Closure sao suportadas via `is_callable`.
+- `Router::group(..., function () {})` usa Closure como callback.
