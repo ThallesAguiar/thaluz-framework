@@ -4,14 +4,13 @@ use Core\Response;
 use Core\Router;
 
 Router::get('/api', function () {
-    return Response::json(['message' => 'Bem-vindo ao Thaluz API']);
+    return Response::json('Bem-vindo ao thaluz API');
 });
 
 Router::get('/api/ping', function () {
-    Response::json([
-        'ok' => true,
-        'message' => 'Thaluz API online',
-    ]);
+    Response::json(
+        'thaluz API online',
+    );
 });
 
 // Rotas publicas
@@ -29,5 +28,7 @@ Router::group(['middleware' => ['auth']], function () {
     Router::put('/api/users/{id}', 'UserController@update');
     Router::delete('/api/users/{id}', 'UserController@destroy');
 
-    Router::get('/api/project', 'ProjectController@index');
+    Router::get('/api/projects', 'ProjectController@index');
+
+    Router::get('/api/query/mentor', 'ProjectController@test');
 });

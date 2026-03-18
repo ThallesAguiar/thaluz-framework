@@ -1,6 +1,6 @@
-# Arquitetura do Thaluz
+# Arquitetura do thaluz
 
-O Thaluz usa um MVC enxuto orientado a API.
+O thaluz usa um MVC enxuto orientado a API.
 
 ## Estrutura
 

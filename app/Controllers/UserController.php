@@ -23,7 +23,7 @@ class UserController extends Controller
 
     public function index()
     {
-        return $this->json($this->sanitizeUsers(User::all()));
+        return Response::json(null, $this->sanitizeUsers(User::all()));
     }
 
     public function show($id)
@@ -38,7 +38,7 @@ class UserController extends Controller
             );
         }
 
-        return $this->json($this->sanitizeUser($user));
+        return Response::json(null, $this->sanitizeUser($user));
     }
 
     public function store()
@@ -57,14 +57,14 @@ class UserController extends Controller
             return Response::error(
                 'Validation Error',
                 'Ja existe usuario com esse email.',
-                422
+                409 
             );
         }
 
         $data['password'] = password_hash($data['password'], PASSWORD_DEFAULT);
 
         $user = User::create($data);
-        return $this->json($this->sanitizeUser($user), 201);
+        return Response::json('Usuário cadastrado com sucesso.', $this->sanitizeUser($user), 201);
     }
 
     public function update($id)
@@ -94,7 +94,7 @@ class UserController extends Controller
                 return Response::error(
                     'Validation Error',
                     'Ja existe usuario com esse email.',
-                    422
+                    409
                 );
             }
         }
@@ -110,7 +110,7 @@ class UserController extends Controller
             );
         }
 
-        return $this->json($this->sanitizeUser($user));
+        return Response::json(null, $this->sanitizeUser($user));
     }
 
     public function destroy($id)
@@ -125,6 +125,6 @@ class UserController extends Controller
             );
         }
 
-        return $this->json(['message' => 'Usuario deletado com sucesso']);
+        return Response::json('Usuario deletado com sucesso');
     }
 }

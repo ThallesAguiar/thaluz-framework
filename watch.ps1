@@ -1,4 +1,4 @@
-# Monitor de arquivos para o Thaluz (Windows)
+# Monitor de arquivos para o thaluz (Windows)
 $path = "."
 $filter = "*.php"
 
@@ -7,7 +7,7 @@ $fsw = New-Object IO.FileSystemWatcher $path, $filter -Property @{
     EnableRaisingEvents = $true
 }
 
-Write-Host "Iniciando Thaluz com Watch mode (Windows)..." -ForegroundColor Cyan
+Write-Host "Iniciando thaluz com Watch mode (Windows)..." -ForegroundColor Cyan
 
 function Start-Server {
     if ($global:serverProcess) {

@@ -79,6 +79,6 @@ class JwtService
 
     private static function issuer(): string
     {
-        return $_ENV['JWT_ISSUER'] ?? ($_ENV['APP_NAME'] ?? 'Thaluz');
+        return $_ENV['JWT_ISSUER'] ?? ($_ENV['APP_NAME'] ?? 'thaluz');
     }
 }

@@ -1,5 +1,7 @@
 {
     "name": "thallesaguiar/thaluz",
+    "description": "Micro framework baseado em Laravel",
+    "type": "project",
     "autoload": {
         "psr-4": {
             "App\\": "app/",
@@ -13,7 +15,8 @@
         }
     ],
     "require": {
-        "firebase/php-jwt": "6.10"
+        "firebase/php-jwt": "^6.10",
+        "php": "^8.1"
     },
     "scripts": {
         "start": "php serve.php",

@@ -36,14 +36,17 @@ class AuthController extends Controller
         $accessToken = JwtService::makeAccessToken((int) $user['id']);
         $refreshToken = JwtService::makeRefreshToken((int) $user['id']);
 
-        return $this->json([
-            'access_token' => $accessToken['token'],
-            'token_type' => 'Bearer',
-            'expires_at' => $accessToken['expires_at'],
-            'refresh_token' => $refreshToken['token'],
-            'refresh_expires_at' => $refreshToken['expires_at'],
-            'user' => $this->sanitizeUser($user),
-        ]);
+        return Response::json(
+            'Autenticação Concluída com Sucesso',
+            [
+                'access_token' => $accessToken['token'],
+                'token_type' => 'Bearer',
+                'expires_at' => $accessToken['expires_at'],
+                'refresh_token' => $refreshToken['token'],
+                'refresh_expires_at' => $refreshToken['expires_at'],
+                'user' => $this->sanitizeUser($user),
+            ]
+        );
     }
 
     public function refresh()
@@ -76,14 +79,17 @@ class AuthController extends Controller
         $accessToken = JwtService::makeAccessToken((int) $user['id']);
         $refreshToken = JwtService::makeRefreshToken((int) $user['id']);
 
-        return $this->json([
-            'access_token' => $accessToken['token'],
-            'token_type' => 'Bearer',
-            'expires_at' => $accessToken['expires_at'],
-            'refresh_token' => $refreshToken['token'],
-            'refresh_expires_at' => $refreshToken['expires_at'],
-            'user' => $this->sanitizeUser($user),
-        ]);
+        return Response::json(
+            'Autenticação Renovada com Sucesso',
+            [
+                'access_token' => $accessToken['token'],
+                'token_type' => 'Bearer',
+                'expires_at' => $accessToken['expires_at'],
+                'refresh_token' => $refreshToken['token'],
+                'refresh_expires_at' => $refreshToken['expires_at'],
+                'user' => $this->sanitizeUser($user),    
+            ]
+        );
     }
 
     public function me()
@@ -91,16 +97,23 @@ class AuthController extends Controller
         $user = Request::user();
 
         if (!$user) {
-            return Response::error('Unauthorized', 'Usuario nao autenticado.', 401);
+            return Response::error(
+                'Unauthorized', 
+                'Usuario nao autenticado.', 
+                401
+            );
         }
 
-        return $this->json($this->sanitizeUser($user));
+        return Response::json(
+            'Usuário autenticado',
+            $this->sanitizeUser($user)
+        );
     }
 
     public function logout()
     {
-        return $this->json([
-            'message' => 'Logout stateless: descarte access_token e refresh_token no cliente.',
-        ]);
+        return Response::json(
+            'Logout stateless: descarte access_token e refresh_token no cliente.',
+        );
     }
 }

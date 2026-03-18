@@ -1,13 +1,14 @@
 <?php
 
 if ($argc < 2) {
-    echo "Thaluz Artisan CLI\n";
+    echo "thaluz Artisan CLI\n";
     echo "Uso: php artisan [comando] [argumentos]\n";
     echo "Comandos disponiveis:\n";
     echo "  make:migration [nome]     - Cria uma nova migration\n";
     echo "  make:controller [nome]    - Cria um novo Controller\n";
     echo "  make:model [nome]         - Cria um novo Model\n";
     echo "  make:middleware [nome]    - Cria um novo Middleware\n";
+    echo "  make:db-connection-clone  - Clona uma conexao do database.php e duplica vars no .env.example\n";
     echo "  migrate                   - Executa as migrations pendentes\n";
     echo "  rollback [steps]          - Desfaz as ultimas migrations\n";
     exit;
@@ -27,6 +28,9 @@ switch ($command) {
         break;
     case 'make:middleware':
         createMiddleware($argv[2] ?? null);
+        break;
+    case 'make:db-connection-clone':
+        cloneDbConnection(array_slice($argv, 2));
         break;
     case 'migrate':
         require_once 'migrate.php';
@@ -135,4 +139,468 @@ function createMiddleware($name) {
 
     file_put_contents($path, $template);
     echo "Middleware criado: app/Middleware/$name.php\n";
+}
+
+function cloneDbConnection(array $args): void
+{
+    $options = parseCliOptions($args);
+
+    $from = isset($options['from']) ? trim((string) $options['from']) : null;
+    $to = isset($options['to']) ? trim((string) $options['to']) : null;
+    $force = array_key_exists('force', $options);
+    $dryRun = array_key_exists('dry-run', $options) || array_key_exists('dryrun', $options);
+
+    if (!$from || !$to) {
+        echo "Erro: use --from=<ConexaoOrigem> e --to=<ConexaoDestino>\n";
+        echo "Exemplo: php artisan make:db-connection-clone --from=Mentor --to=Professor\n";
+        echo "Opcoes: --force (sobrescreve), --dry-run (nao escreve arquivos)\n";
+        exit(1);
+    }
+
+    $fromKey = strtolower($from);
+    $toKey = strtolower($to);
+
+    if ($fromKey === $toKey) {
+        echo "Erro: --from e --to nao podem ser iguais.\n";
+        exit(1);
+    }
+
+    $configPath = __DIR__ . '/config/database.php';
+    if (!file_exists($configPath)) {
+        echo "Erro: arquivo nao encontrado: config/database.php\n";
+        exit(1);
+    }
+
+    $configContents = file_get_contents($configPath);
+    if ($configContents === false) {
+        echo "Erro: nao foi possivel ler config/database.php\n";
+        exit(1);
+    }
+
+    [$newConfigContents, $fromEnvVars, $toEnvVars, $driverLabel] = cloneConnectionInDatabaseConfig(
+        $configContents,
+        $fromKey,
+        $toKey,
+        $force
+    );
+
+    $envPaths = [];
+    $envExample = __DIR__ . '/.env.example';
+    $envExampleAlt = __DIR__ . '/.env-example';
+    if (file_exists($envExample)) {
+        $envPaths[] = $envExample;
+    }
+    if (file_exists($envExampleAlt)) {
+        $envPaths[] = $envExampleAlt;
+    }
+
+    if (!$dryRun) {
+        file_put_contents($configPath, $newConfigContents);
+    }
+
+    foreach ($envPaths as $path) {
+        $envContents = file_get_contents($path);
+        if ($envContents === false) {
+            echo "Aviso: nao foi possivel ler " . basename($path) . "\n";
+            continue;
+        }
+
+        $newEnvContents = cloneEnvExampleVars($envContents, $fromEnvVars, $toEnvVars, $force, $toKey, $driverLabel);
+        if (!$dryRun) {
+            file_put_contents($path, $newEnvContents);
+        }
+    }
+
+    echo ($dryRun ? "[dry-run] " : "") . "Conexao clonada: '$fromKey' -> '$toKey'\n";
+    echo ($dryRun ? "[dry-run] " : "") . "Atualizado: config/database.php\n";
+    foreach ($envPaths as $path) {
+        echo ($dryRun ? "[dry-run] " : "") . "Atualizado: " . basename($path) . "\n";
+    }
+}
+
+function parseCliOptions(array $args): array
+{
+    $options = [];
+
+    for ($i = 0; $i < count($args); $i++) {
+        $arg = $args[$i];
+        if (!is_string($arg) || $arg === '' || !str_starts_with($arg, '--')) {
+            continue;
+        }
+
+        $arg = substr($arg, 2);
+        if ($arg === '') {
+            continue;
+        }
+
+        $eqPos = strpos($arg, '=');
+        if ($eqPos !== false) {
+            $key = substr($arg, 0, $eqPos);
+            $value = substr($arg, $eqPos + 1);
+            $options[$key] = $value;
+            continue;
+        }
+
+        $key = $arg;
+        $next = $args[$i + 1] ?? null;
+        if (is_string($next) && $next !== '' && !str_starts_with($next, '--')) {
+            $options[$key] = $next;
+            $i++;
+            continue;
+        }
+
+        $options[$key] = true;
+    }
+
+    return $options;
+}
+
+function normalizeDbEnvPrefix(string $name): string
+{
+    $prefix = preg_replace('/[^A-Za-z0-9]+/', '_', $name);
+    $prefix = trim((string) $prefix, '_');
+    $prefix = strtoupper($prefix);
+
+    return $prefix !== '' ? $prefix : strtoupper($name);
+}
+
+function mapDbEnvVar(string $envVar, string $fromPrefix, string $toPrefix): string
+{
+    $fromToken = 'DB_' . $fromPrefix . '_';
+    $toToken = 'DB_' . $toPrefix . '_';
+
+    if (str_starts_with($envVar, $fromToken)) {
+        return $toToken . substr($envVar, strlen($fromToken));
+    }
+
+    if (str_starts_with($envVar, 'DB_')) {
+        return $toToken . substr($envVar, 3);
+    }
+
+    return $envVar;
+}
+
+function cloneConnectionInDatabaseConfig(string $contents, string $from, string $to, bool $force): array
+{
+    $fromPrefix = normalizeDbEnvPrefix($from);
+    $toPrefix = normalizeDbEnvPrefix($to);
+
+    [$fromBlockStart, $fromBlockEnd, $fromBlock] = findPhpConnectionBlock($contents, $from);
+    if ($fromBlockStart === null) {
+        echo "Erro: conexao '$from' nao encontrada em config/database.php\n";
+        exit(1);
+    }
+
+    if (!is_int($fromBlockStart) || !is_int($fromBlockEnd) || !is_string($fromBlock) || $fromBlock === '') {
+        echo "Erro: nao foi possivel ler o bloco da conexao '$from' em config/database.php\n";
+        exit(1);
+    }
+
+    [$toBlockStart, $toBlockEnd] = findPhpConnectionBlock($contents, $to);
+    if ($toBlockStart !== null && !$force) {
+        echo "Erro: conexao '$to' ja existe em config/database.php (use --force para sobrescrever)\n";
+        exit(1);
+    }
+
+    // Captura env vars do bloco original (apenas DB_*).
+    preg_match_all('/\\$_ENV\\[[\'"]([^\'"]+)[\'"]\\]/', $fromBlock, $matches);
+    $fromEnvVars = array_values(array_unique(array_filter($matches[1] ?? [], fn ($v) => is_string($v) && str_starts_with($v, 'DB_'))));
+    $toEnvVars = array_values(array_unique(array_map(fn ($v) => mapDbEnvVar($v, $fromPrefix, $toPrefix), $fromEnvVars)));
+
+    $driver = getDriverFromBlock($fromBlock);
+    $driverLabel = getDriverLabel($driver);
+
+    $newBlock = $fromBlock;
+
+    // Troca o nome da chave da conexao.
+    $newBlock = preg_replace(
+        '/^(\s*)([\'"])' . preg_quote($from, '/') . '\\2\\s*=>/m',
+        '$1$2' . $to . '$2 =>',
+        $newBlock,
+        1
+    );
+
+    if ($newBlock === null) {
+        echo "Erro: falha ao gerar novo bloco de conexao.\n";
+        exit(1);
+    }
+
+    // Troca os env vars dentro do bloco.
+    $newBlock = preg_replace_callback(
+        '/\\$_ENV\\[[\'"]([^\'"]+)[\'"]\\]/',
+        function ($m) use ($fromPrefix, $toPrefix) {
+            $envVar = $m[1] ?? '';
+            if (!is_string($envVar) || $envVar === '' || !str_starts_with($envVar, 'DB_')) {
+                return $m[0];
+            }
+            $mapped = mapDbEnvVar($envVar, $fromPrefix, $toPrefix);
+            return str_replace($envVar, $mapped, $m[0]);
+        },
+        $newBlock
+    );
+
+    if ($newBlock === null) {
+        echo "Erro: falha ao substituir env vars no bloco de conexao.\n";
+        exit(1);
+    }
+
+    $eol = str_contains($contents, "\r\n") ? "\r\n" : "\n";
+
+    // Remove bloco do destino se --force.
+    if ($toBlockStart !== null && $toBlockEnd !== null) {
+        $contents = substr($contents, 0, $toBlockStart) . substr($contents, $toBlockEnd);
+        // Recalcula posicoes do bloco origem se ele estava depois do bloco removido.
+        if ($toBlockStart < $fromBlockStart) {
+            $delta = $toBlockEnd - $toBlockStart;
+            $fromBlockStart -= $delta;
+            $fromBlockEnd -= $delta;
+        }
+    }
+
+    $insertAt = findConnectionInsertPosition($contents, $from);
+    $prefix = substr($contents, 0, $insertAt);
+    $suffix = substr($contents, $insertAt);
+
+    $needsLeadingEol = !str_ends_with($prefix, $eol);
+    $indent = getConnectionIndent($newBlock);
+    $comment = $indent . "// " . $to . " (" . $driverLabel . ")";
+    $insertion = ($needsLeadingEol ? $eol : '') . $comment . $eol . $newBlock;
+    if (!str_ends_with($insertion, $eol)) {
+        $insertion .= $eol;
+    }
+
+    $newContents = $prefix . $insertion . $suffix;
+
+    return [$newContents, $fromEnvVars, $toEnvVars, $driverLabel];
+}
+
+function findPhpConnectionBlock(string $contents, string $connectionName): array
+{
+    $pattern = '/(^[ \t]*)([\'"])' . preg_quote($connectionName, '/') . '\\2\\s*=>\\s*\\[/m';
+    if (!preg_match($pattern, $contents, $m, PREG_OFFSET_CAPTURE)) {
+        return [null, null, null];
+    }
+
+    $matchOffset = $m[0][1];
+    $bracketPos = strpos($contents, '[', $matchOffset);
+    if ($bracketPos === false) {
+        return [null, null, null];
+    }
+
+    $len = strlen($contents);
+    $depth = 0;
+    $inSingle = false;
+    $inDouble = false;
+    $escape = false;
+    $endPos = null;
+
+    for ($i = $bracketPos; $i < $len; $i++) {
+        $ch = $contents[$i];
+
+        if ($escape) {
+            $escape = false;
+            continue;
+        }
+
+        if ($ch === '\\\\') {
+            if ($inSingle || $inDouble) {
+                $escape = true;
+            }
+            continue;
+        }
+
+        if ($ch === "'" && !$inDouble) {
+            $inSingle = !$inSingle;
+            continue;
+        }
+
+        if ($ch === '"' && !$inSingle) {
+            $inDouble = !$inDouble;
+            continue;
+        }
+
+        if ($inSingle || $inDouble) {
+            continue;
+        }
+
+        if ($ch === '[') {
+            $depth++;
+            continue;
+        }
+
+        if ($ch === ']') {
+            $depth--;
+            if ($depth === 0) {
+                $endPos = $i + 1;
+                break;
+            }
+        }
+    }
+
+    if ($endPos === null) {
+        return [null, null, null];
+    }
+
+    // Consome espacos e virgula apos o fechamento do array.
+    $j = $endPos;
+    while ($j < $len && ($contents[$j] === ' ' || $contents[$j] === "\t" || $contents[$j] === "\r" || $contents[$j] === "\n")) {
+        $j++;
+    }
+    if ($j < $len && $contents[$j] === ',') {
+        $j++;
+    }
+
+    $block = substr($contents, $matchOffset, $j - $matchOffset);
+
+    return [$matchOffset, $j, $block];
+}
+
+function cloneEnvExampleVars(string $contents, array $fromEnvVars, array $toEnvVars, bool $force, string $toKey, string $driverLabel): string
+{
+    $eol = str_contains($contents, "\r\n") ? "\r\n" : "\n";
+    $lines = preg_split('/\\r\\n|\\n|\\r/', $contents);
+    if ($lines === false) {
+        return $contents;
+    }
+
+    $lineByVar = [];
+    foreach ($lines as $idx => $line) {
+        if (!is_string($line)) {
+            continue;
+        }
+        if (preg_match('/^([A-Z0-9_]+)=(.*)$/', $line, $m)) {
+            $lineByVar[$m[1]] = $idx;
+        }
+    }
+
+    $pairs = [];
+    for ($i = 0; $i < count($fromEnvVars); $i++) {
+        $fromVar = $fromEnvVars[$i] ?? null;
+        $toVar = $toEnvVars[$i] ?? null;
+        if (!is_string($fromVar) || !is_string($toVar) || $fromVar === '' || $toVar === '' || $fromVar === $toVar) {
+            continue;
+        }
+        $pairs[] = [$fromVar, $toVar];
+    }
+
+    $pairs = array_values(array_unique($pairs, SORT_REGULAR));
+
+    $insertAfter = -1;
+    foreach ($pairs as [$fromVar]) {
+        if (isset($lineByVar[$fromVar])) {
+            $insertAfter = max($insertAfter, $lineByVar[$fromVar]);
+        }
+    }
+
+    if ($insertAfter === -1) {
+        // Fallback: depois do ultimo DB_* existente.
+        foreach ($lines as $idx => $line) {
+            if (is_string($line) && preg_match('/^DB_[A-Z0-9_]+=/', $line)) {
+                $insertAfter = $idx;
+            }
+        }
+    }
+
+    $toAdd = [];
+    foreach ($pairs as [$fromVar, $toVar]) {
+        $fromIdx = $lineByVar[$fromVar] ?? null;
+        $toIdx = $lineByVar[$toVar] ?? null;
+
+        $value = '';
+        if (is_int($fromIdx)) {
+            $line = $lines[$fromIdx] ?? '';
+            $pos = is_string($line) ? strpos($line, '=') : false;
+            $value = ($pos !== false) ? substr($line, $pos + 1) : '';
+        }
+
+        if (is_int($toIdx)) {
+            if ($force) {
+                $lines[$toIdx] = $toVar . '=' . $value;
+            }
+            continue;
+        }
+
+        $toAdd[] = $toVar . '=' . $value;
+    }
+
+    if (count($toAdd) === 0) {
+        return rtrim(implode($eol, $lines)) . $eol;
+    }
+
+    $insertPos = $insertAfter + 1;
+    $comment = "# " . $toKey . " (" . $driverLabel . ")";
+    $block = [];
+    if ($insertPos > 0 && ($lines[$insertPos - 1] ?? '') !== '') {
+        $block[] = '';
+    }
+    $block[] = $comment;
+    $block = array_merge($block, $toAdd);
+    $block[] = '';
+
+    array_splice($lines, $insertPos, 0, $block);
+
+    return rtrim(implode($eol, $lines)) . $eol;
+}
+
+function getDriverFromBlock(string $block): string
+{
+    if (preg_match('/[\'"]driver[\'"]\\s*=>\\s*[\'"]([^\'"]+)[\'"]/', $block, $m)) {
+        return strtolower($m[1]);
+    }
+
+    return 'mysql';
+}
+
+function getDriverLabel(string $driver): string
+{
+    switch (strtolower($driver)) {
+        case 'mysql':
+            return 'MySQL';
+        case 'mariadb':
+            return 'MariaDB';
+        case 'pgsql':
+            return 'PostgreSQL';
+        case 'sqlite':
+            return 'SQLite';
+        case 'sqlsrv':
+            return 'SQL Server';
+        case 'oracle':
+        case 'oci':
+            return 'Oracle';
+        default:
+            return 'Database';
+    }
+}
+
+function getConnectionIndent(string $block): string
+{
+    if (preg_match('/^(\\s*)[\'"][^\'"]+[\'"]\\s*=>\\s*\\[/m', $block, $m)) {
+        return $m[1];
+    }
+
+    return '        ';
+}
+
+function findConnectionInsertPosition(string $contents, string $from): int
+{
+    $baseOrder = ['mysql', 'mariadb', 'pgsql', 'sqlite', 'sqlsrv', 'oracle'];
+    $maxEnd = null;
+
+    foreach ($baseOrder as $name) {
+        [$start, $end] = findPhpConnectionBlock($contents, $name);
+        if ($start !== null && $end !== null) {
+            $maxEnd = $maxEnd === null ? $end : max($maxEnd, $end);
+        }
+    }
+
+    if ($maxEnd !== null) {
+        return $maxEnd;
+    }
+
+    [$fromStart, $fromEnd] = findPhpConnectionBlock($contents, $from);
+    if ($fromEnd !== null) {
+        return $fromEnd;
+    }
+
+    return strlen($contents);
 }

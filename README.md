@@ -1,4 +1,4 @@
-# Thaluz - Mini Framework API PHP
+# thaluz - Mini Framework API PHP
 
 Mini framework PHP inspirado no Laravel, focado em APIs.
 
@@ -6,7 +6,7 @@ Mini framework PHP inspirado no Laravel, focado em APIs.
 
 - PHP 8.0+
 - Composer
-- MySQL
+- MySQL (ou outros drivers suportados)
 
 ## Como iniciar
 
@@ -19,16 +19,26 @@ composer install
 2. Configure o `.env` com banco e JWT:
 
 ```env
+DB_CONNECTION=mysql
 DB_HOST=localhost
 DB_PORT=3306
 DB_DATABASE=thaluz
 DB_USERNAME=root
 DB_PASSWORD=
 JWT_SECRET=change_me_with_a_long_random_secret
-JWT_ISSUER=Thaluz
+JWT_ISSUER=thaluz
 JWT_ACCESS_TTL_MINUTES=15
 JWT_REFRESH_TTL_DAYS=30
 ```
+
+Drivers suportados: `mysql`, `mariadb`, `pgsql`, `sqlite`, `sqlsrv`, `oracle`.
+As variaveis completas de exemplo ficam em `.env.example`.
+
+Mini guia de padronizacao:
+1. Os nomes das conexoes em `config/database.php` ficam sempre em minusculo.
+2. Use `DB_CONNECTION` para escolher a conexao padrao.
+3. Para clonar uma conexao base: `php artisan make:db-connection-clone --from=mysql --to=relatorios`.
+Mais detalhes em `docs/DATABASE.md`.
 
 3. Rode migrations:
 
@@ -39,7 +49,7 @@ php artisan migrate
 Rollback de migrations (exemplo, 2 passos):
 
 ```bash
-php artisan migrate:rollback 2
+php artisan rollback 2
 ```
 
 4. Inicie o servidor:
@@ -57,6 +67,7 @@ composer dev
 | `php artisan make:controller {nome}` | Cria controller em `app/Controllers` |
 | `php artisan make:model {nome}` | Cria model em `app/Models` |
 | `php artisan make:middleware {nome}` | Cria middleware em `app/Middleware` |
+| `php artisan make:db-connection-clone --from=... --to=...` | Clona uma conexao do `config/database.php` |
 | `php artisan rollback [steps]` | Desfaz as ultimas migrations |
 
 ## Autenticacao JWT 100% stateless
